@@ -6,64 +6,70 @@ from config import CONFIG
 from utils import plot_test_performance
 
 
-class SARSA:
-    def __init__(self, env, alpha=0.5, gamma=0.95, epsilon=0.0, epsilon_decay=0.99, min_epsilon=0.01):
+class MonteCarloPolicyIteration:
+    def __init__(self, env, discount_factor=0.95, epsilon=0.1):
         self.env = env
-        self.alpha = alpha
-        self.gamma = gamma
+        self.discount_factor = discount_factor
         self.epsilon = epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
-        # Initialize Q-table
+
         position_size = int(env.observation_space.high[0]) + 1
         velocity_size = int(env.observation_space.high[1]) + 1
         self.Q = np.zeros((position_size, velocity_size, env.action_space.n))
 
+        action_space = env.action_space.n
+
+        self.returns = {(p, v): {a: [] for a in range(action_space)}
+                        for p in range(position_size)
+                        for v in range(velocity_size)}
+        self.policy = np.zeros((position_size, velocity_size), dtype=int)
+
     def choose_action(self, state):
-        # Using Epsilon-greedy policy
+        # Epsilon-greedy policy
         if np.random.uniform(0, 1) < self.epsilon:
-            # Explore
             return self.env.action_space.sample()
         else:
-            # Exploit
             position, velocity = int(state[0]), int(state[1])
-            return np.argmax(self.Q[position, velocity])
+            return self.policy[position, velocity]
 
-    def learn(self, state, action, reward, next_state, next_action, done):
+    def update_Q(self, episode):
+        # Update action value function estimate using the episode
+        states, actions, rewards = zip(*episode)
+        discounts = np.array([self.discount_factor**i for i in range(len(rewards)+1)])
+        for i, state in enumerate(states):
+            position, velocity = int(state[0]), int(state[1])
+            old_Q = self.Q[position, velocity, actions[i]]
+            self.returns[(position, velocity)][actions[i]].append(sum(rewards[i:]*discounts[:-(i+1)]))
+            self.Q[position, velocity, actions[i]] = np.mean(self.returns[(position, velocity)][actions[i]])
+
+    def update_policy(self, state):
+        # Update the policy based on the action-value function
         position, velocity = int(state[0]), int(state[1])
-        next_position, next_velocity = int(next_state[0]), int(next_state[1])
+        self.policy[position, velocity] = np.argmax(self.Q[position, velocity])
 
-        # Ensure action is an integer
-        action = int(action)
+    def generate_episode(self, env):
+        # Generate an episode using the current policy
+        episode = []
+        state = env.reset()
+        done = False
+        while not done:
+            action = self.choose_action(state)
+            next_state, reward, done, _ = env.step(action)
+            episode.append((state, action, reward))
+            state = next_state
+        return episode
 
-        # Update Q-value
-        new_value = self.alpha * (reward + self.gamma * self.Q[next_position, next_velocity, next_action] - self.Q[position, velocity, action])
-        self.Q[position, velocity, action] += new_value
-
-        # Update epsilon
-        if not done:
-            self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
-
-    def train(self, num_episodes):
+    def train(self, env, num_episodes):
         rewards = []
-        for episode in range(num_episodes):
-            state = self.env.reset()
-            state = (int(state[0]), int(state[1]))  # Convert to discrete state
-            total_reward = 0
-            done = False
-
-            while not done:
-                action = self.choose_action(state)
-                next_state, reward, done, _ = self.env.step(action)
-                next_action = self.choose_action(next_state)
-                next_state = (int(next_state[0]), int(next_state[1]))
-                self.learn(state, action, reward, next_state, next_action, done)
-                state = next_state
-                total_reward += reward
-
+        for itr in range(num_episodes):
+            episode = self.generate_episode(env)
+            total_reward = sum(e[2] for e in episode)
+            self.update_Q(episode)
+            for p in range(int(env.observation_space.high[0]) + 1):
+                for v in range(int(env.observation_space.high[1]) + 1):
+                    self.update_policy((p, v))
             rewards.append(total_reward)
-            print(f"Episode {episode + 1}: Total Reward = {total_reward}")
-        plot_test_performance(rewards, 'sarsa_results.png')
+            print(f"Episode {itr + 1}: Total Reward = {total_reward}")
+        plot_test_performance(rewards, 'policyiteration_results.png')
 
 
 if __name__ == "__main__":
@@ -71,13 +77,13 @@ if __name__ == "__main__":
     np.random.seed(1)
 
     n_steps = 10000
-    RANDOM_RUNS = 500
+    RANDOM_RUNS = 5
     results = collections.defaultdict(list)
 
     for _ in range(RANDOM_RUNS):
         env = SmoothCrosswalkEnv(CONFIG)
-        agent = SARSA(env)
-        agent.train(4000)
+        agent = MonteCarloPolicyIteration(env)
+        agent.train(env, 4000)
 
         state = env.reset()
         total_reward = 0
