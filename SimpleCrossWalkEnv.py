@@ -9,6 +9,7 @@ class SmoothCrosswalkEnv(gym.Env):
     def __init__(self, config):
         super(SmoothCrosswalkEnv, self).__init__()
 
+        # Config vars
         self.actions_list = config['actions_list']
         self.action_space = spaces.Discrete(len(self.actions_list))
         self.config = config
@@ -58,7 +59,8 @@ class SmoothCrosswalkEnv(gym.Env):
         return self.state, reward, done, {"speeding": speeding, "jerk": jerk}
 
     def reset(self):
-        self.state = np.array([0, self.config['init_velocity']])  # Reset to initial state
+        # Reset to initial state
+        self.state = np.array([0, self.config['init_velocity']])
         self.prev_velocity = self.state[1]
         return self.state
 

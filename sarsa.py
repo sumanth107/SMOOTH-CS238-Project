@@ -6,41 +6,39 @@ from config import CONFIG
 from utils import plot_test_performance
 
 
-class QLearning:
-    def __init__(self, env, learning_rate=0.1, discount_factor=0.9, epsilon=0.0, epsilon_decay=0.99, min_epsilon=0.01):
+class SARSA:
+    def __init__(self, env, alpha=0.5, gamma=0.95, epsilon=0.0, epsilon_decay=0.99, min_epsilon=0.01):
         self.env = env
-        self.learning_rate = learning_rate
-        self.discount_factor = discount_factor
+        self.alpha = alpha
+        self.gamma = gamma
         self.epsilon = epsilon
         self.epsilon_decay = epsilon_decay
         self.min_epsilon = min_epsilon
-
         # Initialize Q-table
         position_size = int(env.observation_space.high[0]) + 1
         velocity_size = int(env.observation_space.high[1]) + 1
-        self.Q_table = np.zeros((position_size, velocity_size, env.action_space.n))
+        self.Q = np.zeros((position_size, velocity_size, env.action_space.n))
 
     def choose_action(self, state):
-        if random.uniform(0, 1) < self.epsilon:
+        # Using Epsilon-greedy policy
+        if np.random.uniform(0, 1) < self.epsilon:
+            # Explore
             return self.env.action_space.sample()
         else:
-            position, velocity = state
-            return np.argmax(self.Q_table[position, velocity])
+            # Exploit
+            position, velocity = int(state[0]), int(state[1])
+            return np.argmax(self.Q[position, velocity])
 
-    def learn(self, state, action, reward, next_state, done):
+    def learn(self, state, action, reward, next_state, next_action, done):
         position, velocity = int(state[0]), int(state[1])
         next_position, next_velocity = int(next_state[0]), int(next_state[1])
 
         # Ensure action is an integer
         action = int(action)
 
-        # Q-learning formula
-        old_value = self.Q_table[position, velocity, action]
-        next_max = np.max(self.Q_table[next_position, next_velocity])
-
         # Update Q-value
-        new_value = (1 - self.learning_rate) * old_value + (self.learning_rate) * (reward + self.discount_factor * next_max)
-        self.Q_table[position, velocity, action] = new_value
+        new_value = self.alpha * (reward + self.gamma * self.Q[next_position, next_velocity, next_action] - self.Q[position, velocity, action])
+        self.Q[position, velocity, action] += new_value
 
         # Update epsilon
         if not done:
@@ -57,18 +55,15 @@ class QLearning:
             while not done:
                 action = self.choose_action(state)
                 next_state, reward, done, _ = self.env.step(action)
-                next_state = (int(next_state[0]), int(next_state[1]))  # Convert to discrete state
-
-                self.learn(state, action, reward, next_state, done)
-
+                next_action = self.choose_action(next_state)
+                next_state = (int(next_state[0]), int(next_state[1]))
+                self.learn(state, action, reward, next_state, next_action, done)
                 state = next_state
                 total_reward += reward
 
             rewards.append(total_reward)
             print(f"Episode {episode + 1}: Total Reward = {total_reward}")
-        plot_test_performance(rewards, 'qlearning_results.png')
-
-        return rewards
+        plot_test_performance(rewards, 'sarsa_results.png')
 
 
 if __name__ == "__main__":
@@ -81,7 +76,7 @@ if __name__ == "__main__":
 
     for _ in range(RANDOM_RUNS):
         env = SmoothCrosswalkEnv(CONFIG)
-        agent = QLearning(env)
+        agent = SARSA(env)
         agent.train(4000)
 
         state = env.reset()
