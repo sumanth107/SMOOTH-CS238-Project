@@ -14,8 +14,10 @@ class DQN(nn.Module):
         super(DQN, self).__init__()
         self.fc = nn.Sequential(
             nn.Linear(input_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, output_dim)
+            nn.LeakyReLU(),
+            nn.Linear(128, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, output_dim)
         )
 
     def forward(self, x):
@@ -27,14 +29,19 @@ class DQNAgent:
         self.dqn = DQN(input_dim, output_dim)
         self.criterion = nn.MSELoss()
         self.optimizer = optim.Adam(self.dqn.parameters(), lr=lr)
+        self.epsilon_decay = 0.995
+        self.epsilon = 1.0
+        self.epsilon_min = 0.01
+        self.output_dim = output_dim
 
     def choose_action(self, state):
         state = torch.tensor(state, dtype=torch.float)
         if len(state.shape) == 1:
             state = torch.unsqueeze(state, 0)
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.output_dim)
         q_values = self.dqn(state)
-        action = torch.argmax(q_values, dim=1)
-        return action.item()
+        return np.argmax(q_values.detach().numpy())
 
     def learn(self, state, action, reward, next_state, done):
         state = torch.tensor(state, dtype=torch.float)
@@ -49,7 +56,8 @@ class DQNAgent:
             action = torch.unsqueeze(action, 0)
             done = (done, )
 
-        # Compute Q(s, a) - the model computes Q(s), then we select the columns of actions taken
+        # Compute Q(s, a) - the model computes Q(s),
+        # then we select the columns of actions taken
         q_values = self.dqn(state)
         q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
 
@@ -68,18 +76,22 @@ class DQNAgent:
         loss.backward()
         self.optimizer.step()
 
+        # Decay epsilon
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
 
 if __name__ == "__main__":
     random.seed(1)
     np.random.seed(1)
 
-    n_steps = 10000
+    n_steps = 1000
     RANDOM_RUNS = 5
     results = collections.defaultdict(list)
 
     for _ in range(RANDOM_RUNS):
         env = SmoothCrosswalkEnv(CONFIG)
-        agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr=0.001)
+        agent = DQNAgent(env.observation_space.shape[0], env.action_space.n, lr=0.01)
 
         total_rewards = []
         for episode in range(n_steps):
