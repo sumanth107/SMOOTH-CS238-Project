@@ -101,10 +101,12 @@ if __name__ == "__main__":
             done = False
             fatal = False
             success = False
+            max_jerk = 0
 
             while not done:
                 action = agent.choose_action(state)
                 next_state, reward, done, info = env.step(action)
+                max_jerk = max(max_jerk, info['jerk'])
                 if reward < -100:
                     fatal = True
                 agent.learn(state, action, reward, next_state, done)
@@ -122,3 +124,4 @@ if __name__ == "__main__":
 
         avg_reward = sum(total_rewards) / n_steps
         print("Average Total Reward: {}".format(avg_reward))
+        print("Max Jerk", max_jerk)
