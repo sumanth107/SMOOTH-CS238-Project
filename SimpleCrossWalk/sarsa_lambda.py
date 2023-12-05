@@ -114,12 +114,13 @@ if __name__ == "__main__":
                 if reward == 39:
                     success = True
                 break
-        results['total_reward'].append(total_reward)
-        results['steps'].append(step_to_goal)
-        results['total_jerk'].append(total_jerk)
-        results['max_jerk'].append(max_jerk)
-        results['speeding'].append(1 if speeding else 0)
-        results['success'].append(1 if success else 0)
+        if done:
+            results['total_reward'].append(total_reward)
+            results['steps'].append(step_to_goal)
+            results['total_jerk'].append(total_jerk)
+            results['max_jerk'].append(max_jerk)
+            results['speeding'].append(1 if speeding else 0)
+            results['success'].append(1 if success else 0)
 
     avg_reward = sum(results['total_reward']) / RANDOM_RUNS
     print("Average Total Reward: {}".format(avg_reward))
